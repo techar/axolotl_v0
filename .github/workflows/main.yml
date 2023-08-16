@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - "main"
+      - "dev"
 
 jobs:
   build-axolotl:
@@ -49,7 +50,7 @@ jobs:
         with:
           context: .
           build-args: |
-            BASE_TAG=${{ github.ref_name }}-base-py${{ matrix.python_version }}-${{ matrix.cuda }}-${{ matrix.pytorch }}
+            BASE_TAG=main-base-py${{ matrix.python_version }}-${{ matrix.cuda }}-${{ matrix.pytorch }}
           file: ./docker/Dockerfile
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.metadata.outputs.tags }}-py${{ matrix.python_version }}-${{ matrix.cuda }}-${{ matrix.pytorch }}${{ matrix.axolotl_extras != '' && '-' || '' }}${{ matrix.axolotl_extras }}
@@ -104,5 +105,5 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: |
              ${{ steps.metadata.outputs.tags }}-py${{ matrix.python_version }}-cu${{ matrix.cuda }}-${{ matrix.pytorch }}${{ matrix.axolotl_extras != '' && '-' || '' }}${{ matrix.axolotl_extras }}
-             ${{ (matrix.is_latest) && format('{0}:latest', steps.metadata.inputs.images[0]) || '' }}
+             ${{ (matrix.is_latest) && format('{0}:dev-latest', steps.metadata.inputs.images) || '' }}
           labels: ${{ steps.metadata.outputs.labels }}
