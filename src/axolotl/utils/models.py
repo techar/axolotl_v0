@@ -6,7 +6,9 @@ import math
 import os
 from typing import Optional, Tuple  # noqa: F401
 
+import accelerate
 import bitsandbytes as bnb
+import tensor_parallel as tp
 import torch
 import transformers
 from optimum.bettertransformer import BetterTransformer
@@ -176,7 +178,12 @@ def load_model(
             bnb_4bit_quant_type="nf4",
         )
     try:
-        if cfg.is_llama_derived_model and not cfg.trust_remote_code and not cfg.gptq:
+        if (
+            cfg.is_llama_derived_model
+            and not cfg.trust_remote_code
+            and not cfg.gptq
+            and not cfg.tensor_parallel
+        ):
             from transformers import LlamaForCausalLM
 
             config_kwargs = {}
@@ -221,7 +228,7 @@ def load_model(
         #         device=cfg.device,
         #     )
         #     model.train() # sets to train instead of eval mode
-        elif model_type and not cfg.trust_remote_code:
+        elif model_type and not cfg.trust_remote_code and not cfg.tensor_parallel:
             if cfg.gptq:
                 model = AutoModelForCausalLM.from_pretrained(
                     base_model,
@@ -240,6 +247,19 @@ def load_model(
                     trust_remote_code=cfg.trust_remote_code or False,
                     **model_kwargs,
                 )
+        elif cfg.tensor_parallel:
+            config = AutoConfig.from_pretrained(
+                base_model,
+                trust_remote_code=cfg.trust_remote_code or False,
+            )
+            with accelerate.init_empty_weights():
+                model = AutoModelForCausalLM.from_config(
+                    config=config,
+                    trust_remote_code=cfg.trust_remote_code or False,
+                ).half()
+            model = tp.TensorParallelPreTrainedModel(
+                model,
+            )
         else:
             config = AutoConfig.from_pretrained(
                 base_model,
@@ -378,6 +398,8 @@ def load_adapter(model, cfg, adapter, inference=False):
         return model, None
     if hasattr(model, "enable_input_require_grads"):
         model.enable_input_require_grads()
+    if adapter == "qlora" and cfg.tensor_parallel:
+        return load_tp_qlora(model)
     if adapter in ["lora", "qlora"]:
         return load_lora(model, cfg, inference=inference)
     if adapter == "llama-adapter":
@@ -423,6 +445,25 @@ def find_all_linear_names(model):
         lora_module_names.remove("lm_head")
 
     return list(lora_module_names)
+
+
+def load_tp_qlora(model):
+    from transformers.utils.bitsandbytes import replace_with_bnb_linear
+
+    model = replace_with_bnb_linear(
+        model,
+        quantization_config=BitsAndBytesConfig(
+            load_in_4bit=True,
+            llm_int8_threshold=6.0,
+            llm_int8_has_fp16_weight=False,
+            bnb_4bit_compute_dtype=torch.float16,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+        ),
+    )
+    model.is_loaded_in_4bit = True
+
+    return model, None
 
 
 def load_lora(model, cfg, inference=False):
