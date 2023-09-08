@@ -1,7 +1,11 @@
 """Benchmarking and measurement utilities"""
 
+import logging
+
 import pynvml
 import torch
+
+LOG = logging.getLogger("axolotl.utils.bench")
 
 
 def gpu_memory_usage(device=0):
@@ -31,7 +35,11 @@ def log_gpu_memory_usage(log, msg, device):
     if not torch.cuda.is_available():
         return (0, 0, 0)
 
-    usage, cache, misc = gpu_memory_usage_all(device)
+    try:
+        usage, cache, misc = gpu_memory_usage_all(device)
+    except ValueError as exc:
+        LOG.exception(exc)
+        return (0, 0, 0)
     extras = []
     if cache > 0:
         extras.append(f"+{cache:.03f}GB cache")
