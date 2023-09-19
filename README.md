@@ -94,7 +94,7 @@ accelerate launch -m axolotl.cli.train examples/openllama-3b/lora.yml
 
 # inference
 accelerate launch -m axolotl.cli.inference examples/openllama-3b/lora.yml \
-    --lora_model_dir="./lora-out"
+    --peft_model_dir="./lora-out"
 ```
 
 ## Installation
@@ -501,7 +501,7 @@ total_num_tokens:
 adapter: lora
 # if you already have a lora model trained that you want to load, put that here
 # lora hyperparameters
-lora_model_dir:
+peft_model_dir:
 lora_r: 8
 lora_alpha: 16
 lora_dropout: 0.05
@@ -738,7 +738,7 @@ Pass the appropriate flag to the train command:
 
 - Pretrained LORA:
   ```bash
-  python -m axolotl.cli.inference examples/your_config.yml --lora_model_dir="./lora-output-dir"
+  python -m axolotl.cli.inference examples/your_config.yml --peft_model_dir="./lora-output-dir"
   ```
 - Full weights finetune:
   ```bash
@@ -755,7 +755,7 @@ Pass the appropriate flag to the train command:
 Add below flag to train command above
 
 ```bash
-python3 -m axolotl.cli.merge_lora examples/your_config.yml --lora_model_dir="./completed-model" --load_in_8bit=False --load_in_4bit=False
+python3 -m axolotl.cli.merge_lora examples/your_config.yml --peft_model_dir="./completed-model" --load_in_8bit=False --load_in_4bit=False
 ```
 
 If you run out of CUDA memory, you can try to merge in system RAM with
