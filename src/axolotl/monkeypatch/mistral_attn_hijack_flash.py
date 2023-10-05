@@ -10,8 +10,8 @@ from einops import rearrange
 from flash_attn.bert_padding import pad_input, unpad_input
 from flash_attn.flash_attn_interface import (  # pylint: disable=ungrouped-imports
     flash_attn_kvpacked_func,
-    flash_attn_varlen_kvpacked_func,
-    flash_attn_varlen_qkvpacked_func,
+    flash_attn_unpadded_kvpacked_func,
+    flash_attn_undpadded_qkvpacked_func,
 )
 from transformers.modeling_outputs import BaseModelOutputWithPast
 from transformers.models.mistral.modeling_mistral import (
@@ -119,8 +119,15 @@ def flashattn_forward(
         qkv = qkv.transpose(1, 3)  # [bsz, q_len, 3, nh, hd]
         qkv = rearrange(qkv, "b s ... -> (b s) ...")
 
-        output = flash_attn_varlen_qkvpacked_func(
-            qkv, cu_seqlens, max_seqlen, 0.0, softmax_scale=None, causal=True
+        output = flash_attn_unpadded_qkvpacked_func(
+            qkv,
+            cu_seqlens,
+            max_seqlen,
+            0.0,
+            softmax_scale=None,
+            causal=True,
+            return_attn_probs=False,
+            deterministic=False
         )
         output = rearrange(output, "(b s) ... -> b s ...", b=bsz)
     elif query_states.shape == key_states.shape:
@@ -139,13 +146,15 @@ def flashattn_forward(
             if attention_mask is not None
             else None,
         )
-        output_unpad = flash_attn_varlen_qkvpacked_func(
+        output_unpad = flash_attn_unpadded_qkvpacked_func(
             qkv_unpad,
             cu_seqlens_q,
             max_seqlen_q,
             0.0,
-            softmax_scale=None,
-            causal=is_causal,
+            None, # softmax_scale
+            is_causal, # causal
+            False, # return_attn_probs
+            False # deterministic
         )
         output = output_pad_fn(output_unpad)
     else:
@@ -181,7 +190,7 @@ def flashattn_forward(
             )
             if q_unpad.dtype != kv_unpad.dtype:
                 kv_unpad = kv_unpad.to(q_unpad.dtype)
-            output_unpad = flash_attn_varlen_kvpacked_func(
+            output_unpad = flash_attn_unpadded_kvpacked_func(
                 q_unpad,
                 kv_unpad,
                 cu_seqlens_q,
@@ -189,8 +198,10 @@ def flashattn_forward(
                 max_seqlen_q,
                 max_seqlen_k,
                 0.0,
-                softmax_scale=None,
-                causal=is_causal,
+                None, # softmax_scale
+                is_causal, # causal
+                False, # return_attn_probs
+                False # deterministic
             )
             output = output_pad_fn(output_unpad)
 
